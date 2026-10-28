@@ -1,5 +1,7 @@
 # Coding Agent Harness: Step 2, tool calls and an agent loop
 
+###### Head to Setup Directly -> [Setup](https://github.com/durva7px/Dcode/blob/stage-02/README.md#setup)
+
 This is a project to build a coding agent harness from scratch, one step at a time.
 
 - **Step 1** sent a single prompt to a language model through
