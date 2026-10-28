@@ -3,8 +3,10 @@ name = "dcode-harness"
 version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
+    "anthropic>=2.3.0",
     "openai",
     "prompt-toolkit",
     "python-dotenv",
+    "pyyaml",
     "rich",
 ]

@@ -68,6 +68,8 @@ PROMPT_STYLE = Style.from_dict({
 TOOL_ICONS = {
     "bash": "$",
     "read_file": "▤",
+    "read_skill": "✦",
+    "browser": "◎",
 }
 
 
@@ -97,7 +99,7 @@ def banner(model):
     info.add_column(style="muted", justify="right")
     info.add_column(style="soft")
     info.add_row("model", model)
-    info.add_row("cwd", os.getcwd())
+    #info.add_row("cwd", os.getcwd())
 
     tip = Text.assemble(
         ("Ask for anything. Type ", "muted"), ("/help", "accent"), (" for commands.", "muted"),
@@ -145,6 +147,13 @@ def _format_args(name, args):
         return args.get("command", "")
     if name == "read_file":
         return args.get("path", "")
+    if name == "read_skill":
+        return args.get("name", "")
+    if name == "browser":
+        lines = args.get("script", "").strip().splitlines()
+        preview = lines[0] if lines else ""
+        more = len(lines) - 1
+        return f"{preview}  (+{more} lines)" if more > 0 else preview
     return ", ".join(f"{k}={v!r}" for k, v in args.items())
 
 
@@ -208,6 +217,15 @@ def session_usage(totals):
     table.add_row("cached tokens", f"{totals['cached_tokens']:,}")
     console.print()
     console.print(table)
+
+
+def retrying(error, wait, attempt, max_retries):
+    reason = getattr(error, "status_code", None) or type(error).__name__
+    console.print(Text.assemble(
+        ("  ↻ ", "accent"),
+        (f"{reason} from the API, retrying in {wait:g}s ", "muted"),
+        (f"({attempt}/{max_retries})", "soft"),
+    ))
 
 
 def info(text):
