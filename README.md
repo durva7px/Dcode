@@ -55,6 +55,8 @@ whichever tool the model asks for by name.
 - Python 3.13 or newer (see `pyproject.toml`)
 - An [OpenRouter API key](https://openrouter.ai/keys)
 
+---
+
 ## Setup
 
 ```bash
