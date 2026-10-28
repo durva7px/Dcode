@@ -48,6 +48,7 @@ whichever tool the model asks for by name.
 | [agent.py](agent.py) | Entry point. Reads your prompt and runs the agent loop |
 | [llm.py](llm.py) | OpenRouter client, system prompt and the `call_llm()` function |
 | [tools.py](tools.py) | Tool functions, their schemas and the `TOOLS` lookup table |
+| [ui.py](ui.py) | Terminal UI: prompt, spinner, tool panels, Markdown replies, usage (built on `rich` and `prompt_toolkit`) |
 
 ## Requirements
 
@@ -84,31 +85,25 @@ MAX_TOKENS=2048
 python agent.py
 ```
 
-Example session:
+This opens an interactive session:
 
-```
-Enter your prompt> What does tools.py do?
+- **Prompt** with history (saved to `~/.dcode_history`), autosuggest from past prompts,
+  and tab completion for slash commands.
+- **Spinner** while the model is thinking.
+- **Tool calls** shown as `● bash  ls`, with the output in a panel (long output is
+  cut to 12 lines on screen; the model still gets all of it). Tool errors show in red.
+- **Replies** rendered as Markdown, followed by that request's token usage.
+- **Follow-ups**: the conversation carries on until you `/clear` or quit.
 
-Tool:  bash {'command': 'ls'}
-README.md
-agent.py
-llm.py
-tools.py
-...
+| Command | What it does |
+|---|---|
+| `/help` | List commands |
+| `/clear` | Start a new conversation |
+| `/usage` | Show token totals for the session |
+| `/exit` | Quit (Ctrl+D also works) |
 
-{'prompt_tokens': 180, 'completion_tokens': 14, 'reasoning_tokens': 0, 'cached_tokens': 0}
-
-Tool:  read_file {'path': 'tools.py'}
-import json
-import subprocess
-...
-
-{'prompt_tokens': 260, 'completion_tokens': 18, 'reasoning_tokens': 0, 'cached_tokens': 0}
-
-Agent:  tools.py defines two tools the agent can use...
-```
-
-The exact tool calls, output and numbers depend on your prompt and the model.
+Press **Ctrl+C** while the agent is working to stop that turn. The interrupted turn is
+removed from the history so the next request stays valid.
 
 ## How it works
 
@@ -162,14 +157,9 @@ already run and read, and can decide what to do next.
   `shell=True`, including commands that change or delete files. Only use it in a folder
   you're happy for it to touch.
 - **No command timeout.** A command that never exits, or waits for input, hangs the harness.
-- **No error handling.** A missing file in `read_file`, bad JSON in the tool arguments,
-  an unknown tool name, a network failure or a rate limit will stop the script with a
-  Python traceback.
-- **One prompt per run.** You can't send a follow-up after the agent answers. Every run
-  starts fresh.
-- **Usage isn't shown for the final reply.** Usage is printed after each round of tool
-  calls, but the loop stops before printing it for the last request, and there's no
-  total for the session.
+- **No retries.** Tool errors (missing file, bad JSON arguments, unknown tool) are sent
+  back to the model, and API errors are shown without crashing, but nothing is retried
+  on rate limits.
 
 ## Roadmap
 
@@ -184,10 +174,11 @@ Next:
 
 - [ ] Add a turn limit to the loop
 - [ ] Ask for confirmation before running commands that could change or delete files
-- [ ] Add a timeout to `bash` and catch tool errors so they go back to the model
-  instead of crashing the harness
-- [ ] Keep the conversation going across prompts
-- [ ] Track token usage across a whole session, and trim or summarize old history
+- [x] Catch tool errors so they go back to the model instead of crashing the harness
+- [ ] Add a timeout to `bash`
+- [x] Keep the conversation going across prompts
+- [x] Polished terminal UI (`rich` + `prompt_toolkit`)
+- [ ] Trim or summarize old history
   when it grows large
 - [ ] Handle errors and retry on rate limits
 - [ ] Log each step so runs can be debugged

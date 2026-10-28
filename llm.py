@@ -20,11 +20,13 @@ SYSTEM_PROMPT = """
 
 MAX_TOKENS = int(os.getenv("MAX_TOKENS", "2048"))
 
+MODEL = "openai/gpt-4o"
+
 
 def call_llm(messages):
     # calling gpt-4o from openrouter
     response = client.chat.completions.create(
-        model="openai/gpt-4o",
+        model=MODEL,
         messages=messages,
         max_tokens=MAX_TOKENS,
         tools=TOOL_SCHEMAS,
