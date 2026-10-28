@@ -11,6 +11,8 @@ This is a project to build a coding agent harness from scratch, one step at a ti
 
 The model can now explore your files and run commands on its own before it answers.
 
+<img width="902" height="622" alt="image" src="https://github.com/user-attachments/assets/f42ea1c4-0011-4277-abbf-0381c8739cc7" />
+
 ## What it does
 
 1. Loads settings from a `.env` file.
