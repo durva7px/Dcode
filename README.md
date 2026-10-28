@@ -55,10 +55,8 @@ Add `.env` to your `.gitignore` so your API key never gets committed.
 ## Usage
 
 ```bash
-python main.py
+python llm.py
 ```
-
-(Replace `main.py` with your script's file name.)
 
 Example session:
 
