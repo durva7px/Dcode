@@ -1,31 +1,42 @@
-# Coding Agent Harness: Step 3, skills
+# Coding Agent Harness: Step 3, skills, a browser and a second provider
 
 This is a project to build a coding agent harness from scratch, one step at a time.
 
 - **Step 1** sent a single prompt to a language model through
   [OpenRouter](https://openrouter.ai/) and printed the reply.
 - **Step 2** gave the model tools it can call, ran those tools on your machine, sent the
-  results back, and kept looping until the model gave a final answer.
-- **Step 3** (this stage) adds **skills**: reusable instructions in `SKILL.md` files that
-  the model loads only when a task needs them.
+  results back, and kept looping until the model gave a final answer. It also added the
+  terminal UI and kept the conversation going across prompts.
+- **Step 3** (this stage) adds:
+  - **[Skills](#skills)**: reusable instructions in `SKILL.md` files that the model loads
+    only when a task needs them.
+  - **[A browser](#browser-ego-browser)**: a `browser` tool that drives a real Chromium
+    browser through ego-browser.
+  - **[A second provider](#calling-the-model)**: call Claude directly with your own
+    Anthropic key, or keep using any model on OpenRouter.
+  - **[Retries](#retries)**: rate limits and server errors are retried with backoff
+    instead of ending the turn.
+  - **[An environment reminder](#the-environment-reminder)**: the current time and git
+    branch are sent with each request.
 
-The model can explore your files and run commands on its own before it answers, and it
-can follow your own playbooks for tasks like committing.
+The model can explore your files, run commands and use a browser on its own before it
+answers, and it can follow your own playbooks for tasks like committing.
 
 ## What it does
 
-1. Loads settings from a `.env` file.
+1. Loads settings from a `.env` file and finds the available skills.
 2. Asks you for a prompt in the terminal.
 3. Sends the conversation to the model set in `MODEL`, through OpenRouter or directly to
-   Anthropic (see [Calling the model](#calling-the-model)), along with the
-   schemas of the available tools.
+   Anthropic (see [Calling the model](#calling-the-model)), along with the system
+   prompt, the schemas of the available tools and a short `<env>` reminder. Rate limits
+   and server errors are retried.
 4. If the model asks for one or more tool calls, the harness:
    - runs each tool with the arguments the model chose,
    - prints the tool name, its arguments and its output,
-   - appends the output to the conversation as a `tool` message,
-   - prints the token usage for that request,
+   - appends the results to the conversation in the provider's format,
    - and calls the model again.
-5. When the model replies without asking for a tool, the harness prints the answer and stops.
+5. When the model replies without asking for a tool, the harness prints the answer and
+   that request's token usage, then waits for your next prompt.
 
 ## Tools
 
@@ -122,7 +133,8 @@ Things to know:
   Screenshots don't reach it yet.
 - ego lite uses your real browser profile, including sites you're signed in to, and the
   harness doesn't ask before running a script. Watch what it does.
-- Set `MAX_TOKENS` to around `4096` so long scripts aren't cut off.
+- On OpenRouter, raise `MAX_TOKENS` to around `4096` so long scripts aren't cut off
+  (the default there is `1000`). The Anthropic default of `16000` is enough.
 
 ## Project layout
 
@@ -146,6 +158,14 @@ Things to know:
     needs credits in the Anthropic Console; a Claude.ai subscription doesn't include them.
 
 ## Setup
+
+With [uv](https://docs.astral.sh/uv/), which uses `pyproject.toml` and `uv.lock`:
+
+```bash
+uv sync
+```
+
+Or with pip:
 
 ```bash
 python -m venv .venv
@@ -185,17 +205,21 @@ MODEL=claude-opus-5-5
 
 ## Usage
 
+Run it from the project folder, so the project's skills are found:
+
 ```bash
 python agent.py
 ```
 
-This opens an interactive session:
+(or `uv run agent.py`). This opens an interactive session:
 
+- **Banner** showing the model, the provider and the working directory.
 - **Prompt** with history (saved to `~/.dcode_history`), autosuggest from past prompts,
   and tab completion for slash commands.
-- **Spinner** while the model is thinking.
-- **Tool calls** shown as `● bash  ls`, with the output in a panel (long output is
-  cut to 12 lines on screen; the model still gets all of it). Tool errors show in red.
+- **Spinner** while the model is thinking, and a `↻` line for each retry.
+- **Tool calls** shown as a badge per tool (`$ bash`, `▤ read_file`, `✦ read_skill`,
+  `◎ browser`) with its arguments, and the output in a panel (long output is cut to 12
+  lines on screen; the model still gets all of it). Tool errors show in red.
 - **Replies** rendered as Markdown, followed by that request's token usage.
 - **Follow-ups**: the conversation carries on until you `/clear` or quit.
 
@@ -283,6 +307,27 @@ away.
 Both SDKs have their own short built-in retries. They're turned off
 (`max_retries=0` on each client) so the two don't stack.
 
+### The environment reminder
+
+`reminder()` in [context.py](context.py) builds a small block that goes with every
+request:
+
+```
+<env>
+time: 2026-10-28 17:30
+git branch: stage-03
+</env>
+```
+
+It goes at the **end** of what's sent, not in the system prompt, because it changes on
+every request. Everything in front of it stays the same, so providers can serve that
+prefix from their prompt cache. How each provider attaches it is in
+[Calling the model](#calling-the-model).
+
+[context.py](context.py) also starts tracking file reads: each time `read_file` runs,
+`note_read()` records the file's modification time in `SEEN`. Nothing uses `SEEN` yet;
+it's groundwork for telling the model when a file it read earlier has changed on disk.
+
 ### The agent loop
 
 [agent.py](agent.py) keeps a `messages` list that starts with
@@ -313,7 +358,13 @@ already run and read, and can decide what to do next.
 - **Commands run without confirmation.** `bash` runs whatever the model asks for with
   `shell=True`, including commands that change or delete files. Only use it in a folder
   you're happy for it to touch.
-- **No command timeout for `bash`.** (`browser` has one.) A command that never exits, or waits for input, hangs the harness.
+- **No command timeout for `bash`.** (`browser` has one.) A command that never exits, or
+  waits for input, hangs the harness.
+- **The browser acts without asking.** It uses your real, signed-in browser profile.
+- **Text-only tool results.** Screenshots and images don't reach the model.
+- **The history keeps growing.** Every request resends the whole conversation, so long
+  sessions get slower and more expensive. Use `/clear` between unrelated tasks.
+- **Skills are found once, at startup.** Restart the harness after adding a skill.
 - **Tool errors aren't retried.** Tool errors (missing file, bad JSON arguments, unknown
   tool) are sent back to the model to deal with. API errors are retried only when
   waiting can help (see [Retries](#retries)).
@@ -322,22 +373,27 @@ already run and read, and can decide what to do next.
 
 Done:
 
-- [x] Send a prompt to a model through OpenRouter and report token usage (step 1)
-- [x] Pass tool schemas to the API and handle `tool_calls` in the response
-- [x] Run the requested tools and send their output back to the model
-- [x] Loop until the model gives a final answer
-- [x] Load skills from `SKILL.md` files on demand (step 3)
-- [x] Drive a real browser with ego-browser
+- Step 1
+  - [x] Send a prompt to a model through OpenRouter and report token usage
+- Step 2
+  - [x] Pass tool schemas to the API and handle tool calls in the response
+  - [x] Run the requested tools and send their output back to the model
+  - [x] Loop until the model gives a final answer
+  - [x] Catch tool errors so they go back to the model instead of crashing the harness
+  - [x] Keep the conversation going across prompts
+  - [x] Polished terminal UI (`rich` + `prompt_toolkit`)
+- Step 3
+  - [x] Load skills from `SKILL.md` files on demand
+  - [x] Drive a real browser with ego-browser
+  - [x] Retry rate limits and server errors with backoff
+  - [x] Call Anthropic directly as a second provider
+  - [x] Send the time and git branch with each request
 
 Next:
 
 - [ ] Add a turn limit to the loop
 - [ ] Ask for confirmation before running commands that could change or delete files
-- [x] Catch tool errors so they go back to the model instead of crashing the harness
 - [ ] Add a timeout to `bash`
-- [x] Keep the conversation going across prompts
-- [x] Polished terminal UI (`rich` + `prompt_toolkit`)
 - [ ] Trim or summarize old history when it grows large
-- [x] Handle errors and retry on rate limits
-- [x] Call Anthropic directly as a second provider
+- [ ] Return images (such as browser screenshots) to the model
 - [ ] Log each step so runs can be debugged
