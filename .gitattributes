@@ -1,0 +1,2 @@
+# main has its own README; merging a stage branch keeps it (needs: git config merge.ours.driver true)
+README.md merge=ours
